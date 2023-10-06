@@ -1,8 +1,8 @@
--- Written By: Kip Potter (a.k.a Mythraun [Fury] - Level 80 Deathnight - Stonemaul)
--- Modified By: Azuredrak0 (a.k.a Drokin) - added Mitigation stats (block, armor, HP) to the window
+-- Written By: Azuredrak0 (a.k.a Drokin - Level 60 Warden, Shaman Tank)
+-- Code partially based on Avoidance mod
 
 -- Global version variable...
-AVOIDANCE_VERSION = "1.0.1.0.C";
+DefenseTable_VERSION = "0.9 beta";
 
 -- Other globals.
 Avoidance_Settings = {};
@@ -18,8 +18,8 @@ function Avoidance_OnLoad(Self)
 	DEFAULT_CHAT_FRAME:AddMessage(format("Avoidance v%s loaded.", AVOIDANCE_VERSION));
 	
 	-- Register the game slash commands necessary for our functionality
-	SLASH_AVOIDANCE1 = "/avoid";
-	SLASH_AVOIDANCE2 = "/avoidance";
+	SLASH_AVOIDANCE1 = "/defensetable";
+	SLASH_AVOIDANCE2 = "/dt";
 	SlashCmdList["AVOIDANCE"] = Avoidance_SlashCommand;
 	
 	-- Register the events.
@@ -35,13 +35,13 @@ end
 -- Shows the command (command-line parameters) options for avoidance.
 --------------------------------------------------------------------------------
 function Avoidance_ShowCommands()
-	DEFAULT_CHAT_FRAME:AddMessage("Avoidance command options:");
+	DEFAULT_CHAT_FRAME:AddMessage("DefenseTable command options:");
 	if (frame:IsShown()) then
-		DEFAULT_CHAT_FRAME:AddMessage("  show [true] - Shows the avoidance window.");
-		DEFAULT_CHAT_FRAME:AddMessage("  hide [false] - Hides the avoidance window.");
+		DEFAULT_CHAT_FRAME:AddMessage("  show [true] - Shows window.");
+		DEFAULT_CHAT_FRAME:AddMessage("  hide [false] - Hides window.");
 	else
-		DEFAULT_CHAT_FRAME:AddMessage("  show [false] - Shows the avoidance window.");
-		DEFAULT_CHAT_FRAME:AddMessage("  hide [true] - Hides the avoidance window.");
+		DEFAULT_CHAT_FRAME:AddMessage("  show [false] - Shows window.");
+		DEFAULT_CHAT_FRAME:AddMessage("  hide [true] - Hides window.");
 	end
 	
 	if (Avoidance_Settings.EnableDebugging) then
@@ -51,8 +51,8 @@ function Avoidance_ShowCommands()
 		DEFAULT_CHAT_FRAME:AddMessage("  debugon  [false] - Enables displaying debug information to the chat window.");
 		DEFAULT_CHAT_FRAME:AddMessage("  debugoff [true] - Disables displaying debug information to the chat window.");
 	end
-	DEFAULT_CHAT_FRAME:AddMessage("  ver - Shows the installed version of Avoidance.");
-	DEFAULT_CHAT_FRAME:AddMessage("  resetframe - Resets the Avoidance frame to it's default position.");
+	DEFAULT_CHAT_FRAME:AddMessage("  ver - Shows the installed version of DefenseTable.");
+	DEFAULT_CHAT_FRAME:AddMessage("  resetframe - Resets the DefenseTable frame to it's default position.");
 	DEFAULT_CHAT_FRAME:AddMessage("  /avoid off will remove savlation when cast on you.");
 	DEFAULT_CHAT_FRAME:AddMessage("  /avoid on will keep savlation when cast on you.");
 end
@@ -96,20 +96,33 @@ end
 function Avoidance_ShowAvoidance(msg)
 	local baseDefense,armorDefense=UnitDefense("player");
 	local defenseContrib = (baseDefense + armorDefense - UnitLevel("player") * 5) / 25;
+	local defenseBonus = (baseDefense + armorDefense - UnitLevel("player") * 5) * .04;
 
 	-- Calculate total avoidance.
-	local baseAvoidance = 5;
+	local baseAvoidance = 5 + defenseBonus;
 	local dodge = GetDodgeChance();
 	local parry = GetParryChance();
-	local totalAvoidance = baseAvoidance + defenseContrib + dodge + parry;
+	local totalAvoidance = baseAvoidance + dodge + parry;
 
-	-- Calculat mitigation stats
+	-- Calculate mitigation stats
 	local block = GetBlockChance();
 	local playerLevel = UnitLevel("player");
 	local base, effectiveArmor = UnitArmor("player");
 	local armorReduction = effectiveArmor/((85 * playerLevel) + 400);
 	armorReduction = (armorReduction/(armorReduction + 1))*100;
 	local maxHealth = UnitHealthMax("player");
+
+	-- Calculate chance to be hit
+	local crush = 0;
+	local crit = 5 - defenseBonus;
+	if crit <= 0 then
+		crit = 0
+	end
+		
+	local hit = 100 - (baseAvoidance + dodge + parry + block + crush + crit);
+	if hit <=0 then
+		hit = 0
+	end
 	
 	-- TODO: Check for shield, and if present, add block chance, otherwise don't add block chance.
 	-- TODO: Should we check for a weapon for parry chance?
