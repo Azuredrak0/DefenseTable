@@ -1,10 +1,10 @@
 ## Interface: 11200
-## Title: Avoidance
+## Title: DefenseTable
 ## Notes: Adds the ability to view total avoidance and avoidance breakdown
-## Author: Kip Potter (a.k.a. Level 80 Deathknight "Mythraun")
-## SavedVariablesPerCharacter: Avoidance_Settings
+## Author: Azuredrak0 (a.k.a. Drokin - L60 Shaman Warden)
+## SavedVariablesPerCharacter: DefenseTable_Settings
 ## Dependencies: 
 ## Version: 1.0.1.1.C
 ## Revised by GuruBlade and Hobbit for turtle WoW
 
-Avoidance.xml
+DefenseTable.xml
