@@ -111,6 +111,7 @@ function Avoidance_ShowAvoidance(msg)
 	local armorReduction = effectiveArmor/((85 * playerLevel) + 400);
 	armorReduction = (armorReduction/(armorReduction + 1))*100;
 	local maxHealth = UnitHealthMax("player");
+	local stackAvoidance = baseAvoidance + dodge + parry + block;
 
 	-- Calculate chance to be hit
 	local crush = 0;
@@ -119,10 +120,14 @@ function Avoidance_ShowAvoidance(msg)
 		crit = 0
 	end
 		
-	local hit = 100 - (baseAvoidance + dodge + parry + block + crush + crit);
+	local hit = 100 - (stackAvoidance + crush + crit);
 	if hit <=0 then
-		hit = 0
+		if hit + crit <= 0 then
+			ctir = 0;
+		end
+		hit = 0;
 	end
+
 	
 	-- TODO: Check for shield, and if present, add block chance, otherwise don't add block chance.
 	-- TODO: Should we check for a weapon for parry chance?
