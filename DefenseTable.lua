@@ -111,23 +111,34 @@ function Avoidance_ShowAvoidance(msg)
 	local armorReduction = effectiveArmor/((85 * playerLevel) + 400);
 	armorReduction = (armorReduction/(armorReduction + 1))*100;
 	local maxHealth = UnitHealthMax("player");
-	local stackAvoidance = baseAvoidance + dodge + parry + block;
+	local avoidanceStack = baseAvoidance + dodge + parry + block;
 
 	-- Calculate chance to be hit
 	local crush = 0;
 	local crit = 5 - defenseBonus;
 	if crit <= 0 then
 		crit = 0
-	end
-		
-	local hit = 100 - (stackAvoidance + crush + crit);
-	if hit <=0 then
-		if hit + crit <= 0 then
-			ctir = 0;
-		end
+	end		
+	local hit = 75
+
+	if avoidanceStack > 100 then
+		crush = 0;
+		crit = 0;
 		hit = 0;
 	end
 
+	if (avoidanceStack + crush) > 100 then
+		crush = math.abs(100 - avoidanceStack - crush)
+		crit = 0;
+		hit = 0;
+	end
+	if (avoidanceStack + crush + crit) > 100 then
+		crit = math.abs(100 - avoidanceStack - crush - crit)
+		hit = 0;
+	end
+	if (avoidanceStack + crusch + crit + hit) > 100 then
+		hit = math.abs(100 - avoidanceStack - crusch - crit - hit)
+	end
 	
 	-- TODO: Check for shield, and if present, add block chance, otherwise don't add block chance.
 	-- TODO: Should we check for a weapon for parry chance?
@@ -137,22 +148,28 @@ function Avoidance_ShowAvoidance(msg)
 		print(format("Total avoidance: %.2f%%", totalAvoidance));
 	else
 		if (Avoidance_Settings.EnableDebugging) then
-			print("Total Avoidance Breakdown");			
+			--print("");			
 			print(format("  Base avoidance : %.2f%%", baseAvoidance));
-			print(format("  Def. avoidance : %.2f%%", defenseContrib));
+			--print(format("  Def. avoidance : %.2f%%", defenseContrib));
 			print(format("  Dodge : %.2f%%", dodge));
 			print(format("  Parry : %.2f%%", parry));
-			print(format("Total Avoidance : %.2f%%", totalAvoidance));
-			print(format("Block Chance : %.2f%%", block));
+			print(format("  Block Chance : %.2f%%", block));
+			print(format("    crushed : %.2f%%", crush));
+			print(format("    critted : %.2f%%", crit));
+			print(format("    hit : %.2f%%", hit));
+			print(format("Dodge + Parry : %.2f%%", totalAvoidance));
 			print(format("Armor: %d(%.1f%%)", effectiveArmor, armorReduction));
 			print(format("HP: %d", maxHealth));
 		end
 		AvoidanceBaseText:SetText(format("%002.2f%% - base avoidance", baseAvoidance));
-		AvoidanceDefText:SetText(format("%002.2f%% - avoid. from defense", defenseContrib));
+		--AvoidanceDefText:SetText(format("%002.2f%% - avoid. from defense", defenseContrib));
 		AvoidanceDodgeText:SetText(format("%002.2f%% - dodge", dodge));
 		AvoidanceParryText:SetText(format("%002.2f%% - parry", parry));
-		AvoidanceTotalText:SetText(format("%002.2f%% - TOTAL AVOIDANCE", totalAvoidance));
 		AvoidanceBlockText:SetText(format("%002.2f%% - block", block));
+		AvoidanceBlockText:SetText(format("%002.2f%% - crushed", crush));
+		AvoidanceBlockText:SetText(format("%002.2f%% - critted", crit));
+		AvoidanceBlockText:SetText(format("%002.2f%% - hit", hit));
+		AvoidanceTotalText:SetText(format("%002.2f%% - Dodge + Parry", totalAvoidance));
 		AvoidanceArmorText:SetText(format("%d(%002.1f%%) - armor", effectiveArmor,armorReduction));
 		AvoidanceHPText:SetText(format("%d - MAX HP", maxHealth));
 	end
@@ -191,17 +208,17 @@ function Avoidance_CreateFrame()
 	
 	AvoidanceTitle = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
 	AvoidanceTitle:SetPoint("TOPLEFT", 10, y);
-	AvoidanceTitle:SetText("Total avoidance breakdown");
+	AvoidanceTitle:SetText("L60 - Defense Table breakdown");
 	
 	y = y - 13;
 	AvoidanceBaseText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
 	AvoidanceBaseText:SetPoint("TOPLEFT", 10, y);
 	AvoidanceBaseText:SetText("00.00% - base avoidance");
 	
-	y = y - 13;
-	AvoidanceDefText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
-	AvoidanceDefText:SetPoint("TOPLEFT", 10, y);
-	AvoidanceDefText:SetText("00.00% - avoid. from defense");
+	--y = y - 13;
+	--AvoidanceDefText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+	--AvoidanceDefText:SetPoint("TOPLEFT", 10, y);
+	--AvoidanceDefText:SetText("00.00% - avoid. from defense");
 	
 	y = y - 13;
 	AvoidanceDodgeText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
@@ -214,6 +231,26 @@ function Avoidance_CreateFrame()
 	AvoidanceParryText:SetText("00.00% - parry");
 	
 	y = y - 13;
+	AvoidanceBlockText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+	AvoidanceBlockText:SetPoint("TOPLEFT", 10, y);
+	AvoidanceBlockText:SetText("00.00% - block");
+
+	y = y - 13;
+	AvoidanceBlockText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+	AvoidanceBlockText:SetPoint("TOPLEFT", 10, y);
+	AvoidanceBlockText:SetText("   00.00% - crushed");
+
+	y = y - 13;
+	AvoidanceBlockText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+	AvoidanceBlockText:SetPoint("TOPLEFT", 10, y);
+	AvoidanceBlockText:SetText("   00.00% - critted");
+
+	y = y - 13;
+	AvoidanceBlockText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+	AvoidanceBlockText:SetPoint("TOPLEFT", 10, y);
+	AvoidanceBlockText:SetText("   00.00% - hit");
+	
+	y = y - 13;
 	AvoidanceDashesText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
 	AvoidanceDashesText:SetPoint("TOPLEFT", 10, y);
 	AvoidanceDashesText:SetText("-------------------------");
@@ -221,13 +258,8 @@ function Avoidance_CreateFrame()
 	y = y - 13;
 	AvoidanceTotalText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
 	AvoidanceTotalText:SetPoint("TOPLEFT", 10, y);
-	AvoidanceTotalText:SetText("00.00% - TOTAL AVOIDANCE");
-	
-	y = y - 13;
-	AvoidanceBlockText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
-	AvoidanceBlockText:SetPoint("TOPLEFT", 10, y);
-	AvoidanceBlockText:SetText("00.00% - block");
-	
+	AvoidanceTotalText:SetText("00.00% - Dodge + Parry");
+		
 	y = y - 13;
 	AvoidanceArmorText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
 	AvoidanceArmorText:SetPoint("TOPLEFT", 10, y);
