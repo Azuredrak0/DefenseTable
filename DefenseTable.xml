@@ -6,8 +6,8 @@
 	
 	<Frame name="DefenseTable">
 		<Scripts>
-			<OnLoad>Avoidance_OnLoad();</OnLoad>
-			<OnEvent>Avoidance_OnEvent();</OnEvent>
+			<OnLoad>DefenseTable_OnLoad();</OnLoad>
+			<OnEvent>DefenseTable_OnEvent();</OnEvent>
 		</Scripts>
 	</Frame>
 </Ui>
