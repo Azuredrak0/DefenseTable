@@ -4,7 +4,7 @@
 ## Author: Azuredrak0 (a.k.a. Drokin - L60 Shaman Warden)
 ## SavedVariablesPerCharacter: DefenseTable_Settings
 ## Dependencies: 
-## Version: 1.0.1.1.C
-## Revised by GuruBlade and Hobbit for turtle WoW
+## Version: 0.9
+## Code based on Avoidance addon
 
 DefenseTable.xml
