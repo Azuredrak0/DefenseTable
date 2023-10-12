@@ -7,7 +7,33 @@ DefenseTable_VERSION = "0.9";
 -- Other globals.
 local DefenseTable_Settings = {};
 local DefenseTable_salv = {};
-local targetLVL = 63;
+local targetLVL = 63; --Lvl 63 by default
+local DefenseTableModule = 1; --on by default
+local mitigationModule = 1; --on by default
+local manaModule = 0; --off by default
+local threatModule = 0; --off by default
+--local GetPlayer = require("UnitPlayer").GetPlayer
+
+-- global for finding text on item text
+DT = DT or {}
+local DT_Tooltip = getglobal("DefenseTableTooltip") or CreateFrame("GameTooltip", "DefenseTableTooltip", nil, "GameTooltipTemplate")
+local DT_Prefix = "DefenseTableTooltip"
+DT_Tooltip:SetOwner(WorldFrame, "ANCHOR_NONE")
+local L = DT["L"]
+local strfind = strfind
+local tonumber = tonumber
+local tinsert = tinsert
+
+-- local function tContains(table, item)
+	-- local index = 1
+	-- while table[index] do
+		-- if ( item == table[index] ) then
+			-- return 1
+		-- end
+		-- index = index + 1
+	-- end
+	-- return nil
+-- end
 
 -- Locals.
 local frame;
@@ -53,8 +79,8 @@ function DefenseTable_ShowCommands()
 		DEFAULT_CHAT_FRAME:AddMessage("  debugon  [false] - Enables displaying debug information to the chat window.");
 		DEFAULT_CHAT_FRAME:AddMessage("  debugoff [true] - Disables displaying debug information to the chat window.");
 	end
-	DEFAULT_CHAT_FRAME:AddMessage("  tar60 - set target level to 60 (default).");
-	DEFAULT_CHAT_FRAME:AddMessage("  tar63 - set target level to 63.");
+	DEFAULT_CHAT_FRAME:AddMessage("  lvl60 - set target level to 60 (default).");
+	DEFAULT_CHAT_FRAME:AddMessage("  lvl63 - set target level to 63.");
 	DEFAULT_CHAT_FRAME:AddMessage("  ver - Shows the installed version of DefenseTable.");
 	DEFAULT_CHAT_FRAME:AddMessage("  resetframe - Resets the DefenseTable frame to it's default position.");
 	DEFAULT_CHAT_FRAME:AddMessage("  /avoid off will remove savlation when cast on you.");
@@ -75,11 +101,13 @@ function DefenseTable_SlashCommand(msg)
 		if (frame:IsShown()) then
 			frame:Hide();
 		end
-	elseif (msg == "tlvl60") then
+	elseif (msg == "lvl60") then
 		targetLVL = 60;
+		DefenseTable_ShowAvoidance();
 		DEFAULT_CHAT_FRAME:AddMessage(format("Target level set to 60."));
-	elseif (msg == "tlvl63") then
+	elseif (msg == "lvl63") then
 		targetLVL = 63;
+		DefenseTable_ShowAvoidance();
 		DEFAULT_CHAT_FRAME:AddMessage(format("Target level set to 63 (Raid bosses)."));
 	elseif (msg == "debugon") then
 		DefenseTable_Settings.EnableDebugging = true;
@@ -106,26 +134,52 @@ end
 function DefenseTable_ShowAvoidance(msg)
 	--targetLVL = GetTargetLevel();
 	local baseDefense,armorDefense=UnitDefense("player");
-	local defenseContrib = (baseDefense + armorDefense - UnitLevel("player") * 5) / 25;
-	local defenseBonus = (baseDefense + armorDefense - UnitLevel("player") * 5) * .04;
+	local defenseContrib = (baseDefense + armorDefense - UnitLevel("player") * 5) / 25; -- not used currently.  Value that Defense contributes to avoidance
+	local defenseBonus = (baseDefense + armorDefense - UnitLevel("player") * 5) * .04; -- defense contribution to each defensive attribute per point
 
 	-- Calculate total avoidance.
-	local baseAvoidance = 5 + defenseBonus+((UnitLevel("player")-targetLVL)*.02);
-	local dodge = GetDodgeChance()+((UnitLevel("player")-targetLVL)*.02);
-	local parry = GetParryChance()+((UnitLevel("player")-targetLVL)*.02);
-	local totalAvoidance = baseAvoidance + dodge + parry;
+	local baseAvoidance = 5 + defenseBonus+((UnitLevel("player")-targetLVL)*.02); -- chance to be missed
+	local dodge = GetDodgeChance()+((UnitLevel("player")-targetLVL)*.02); -- chance to dodge
+	local parry = GetParryChance()+((UnitLevel("player")-targetLVL)*.02); -- chance to parry
+	local totalAvoidance = baseAvoidance + dodge + parry; -- chance to completely avoid an attack
 
 	-- Calculate mitigation stats
-	local block = GetBlockChance()+((UnitLevel("player")-targetLVL)*.02);
+	local block = 0;
+	local blockvalue = 0;
+	
+	-- Check if a shield is in the offhand
+	local isShieldEquipped = shield_equipped() -- check if shield is equipped
+	if isShieldEquipped then -- run this if there's a shield equipped
+		block = GetBlockChance()+((UnitLevel("player")-targetLVL)*.02); -- chance to block an attack
+		-- local shieldBlockValue = getShieldBlockValue() -- retrieves shield block value (probably doesn't require it's own function
+		-- blockvalue = calculateBlockValue(shieldBlockValue) -- get block value contribution from Strength (afaik it's Str - base starting str / 20)
+		--print(blockvalue)
+		
+		local SBValue2 = GetBlockInfo()
+		--print("SBValue2 "..SBValue2)
+		blockvalue = calculateBlockValue(SBValue2) -- get block value contribution from Strength (afaik it's Str - base starting str / 20)
+		
+	else
+		block = 0;
+		blockvalue = 0;
+	end
+	
 	local playerLevel = UnitLevel("player");
 	local base, effectiveArmor = UnitArmor("player");
 	local armorReduction = effectiveArmor/((85 * playerLevel) + 400);
 	armorReduction = (armorReduction/(armorReduction + 1))*100;
 	local maxHealth = UnitHealthMax("player");
 	local avoidanceStack = baseAvoidance + dodge + parry + block;
+	
+	local maxMana = UnitManaMax("player")
+	local MP5 = UnitManaMax("player")
+
 
 	-- Calculate chance to be hit
 	local crush = 0;
+	if targetLVL == 60 then
+		crush = 0
+	end
 	if targetLVL == 63 then
 		crush = 15
 	end
@@ -135,9 +189,12 @@ function DefenseTable_ShowAvoidance(msg)
 	end		
 	local hit = 75
 
-	if avoidanceStack > 100 then
-		crush = 0;
-		crit = 0;
+	if (avoidanceStack + crush + crit + hit) > 100 then
+		hit = 100 - avoidanceStack - crush - crit;
+	end
+
+	if (avoidanceStack + crush + crit) > 100 then
+		crit = 100 - avoidanceStack - crush;
 		hit = 0;
 	end
 
@@ -146,15 +203,14 @@ function DefenseTable_ShowAvoidance(msg)
 		crit = 0;
 		hit = 0;
 	end
-	if (avoidanceStack + crush + crit) > 100 then
-		crit = 100 - avoidanceStack - crush;
+	
+	if avoidanceStack > 100 then
+		crush = 0;
+		crit = 0;
 		hit = 0;
 	end
-	if (avoidanceStack + crush + crit + hit) > 100 then
-		hit = 100 - avoidanceStack - crush - crit;
-	end
 	
-	-- TODO: Check for shield, and if present, add block chance, otherwise don't add block chance.
+
 	-- TODO: Should we check for a weapon for parry chance?
 	-- TODO: Remove block from /avoid and add /mitigation
 	
@@ -172,21 +228,29 @@ function DefenseTable_ShowAvoidance(msg)
 			print(format("    critted : %.2f%%", crit));
 			print(format("    hit : %.2f%%", hit));
 			print(format("Dodge + Parry : %.2f%%", totalAvoidance));
+			-- TODO: Add Block value here
 			print(format("Armor: %d(%.1f%%)", effectiveArmor, armorReduction));
 			print(format("HP: %d", maxHealth));
 		end
 		DefenseTableTitle:SetText(format("L%d - Defense Table breakdown", targetLVL));
-		DefenseTableBaseText:SetText(format("%002.2f%% - base avoidance", baseAvoidance));
-		--DefenseTableDefText:SetText(format("%002.2f%% - avoid. from defense", defenseContrib));
-		DefenseTableDodgeText:SetText(format("%002.2f%% - dodge", dodge));
-		DefenseTableParryText:SetText(format("%002.2f%% - parry", parry));
-		DefenseTableBlockText:SetText(format("%002.2f%% - block", block));
-		DefenseTableCrushText:SetText(format("   %002.2f%% - crushed", crush));
-		DefenseTableCritText:SetText(format("   %002.2f%% - critted", crit));
-		DefenseTableHitText:SetText(format("   %002.2f%% - hit", hit));
-		DefenseTableTotalText:SetText(format("%002.2f%% - base + Dodge + Parry", totalAvoidance));
-		DefenseTableArmorText:SetText(format("%d(%002.1f%%) - armor", effectiveArmor,armorReduction));
-		DefenseTableHPText:SetText(format("%d - MAX HP", maxHealth));
+		DefenseTableBaseText:SetText(format("  %002.2f%% - base avoidance", baseAvoidance));
+		--DefenseTableDefText:SetText(format("  %002.2f%% - avoid. from defense", defenseContrib));
+		DefenseTableDodgeText:SetText(format("  %002.2f%% - dodge", dodge));
+		DefenseTableParryText:SetText(format("  %002.2f%% - parry", parry));
+		DefenseTableBlockText:SetText(format("  %002.2f%% - block (DR:%d)", block,blockvalue));
+		DefenseTableCrushText:SetText(format("     %002.2f%% - crushed", crush));
+		DefenseTableCritText:SetText(format("     %002.2f%% - critted", crit));
+		DefenseTableHitText:SetText(format("     %002.2f%% - hit", hit));
+		if(mitigationModule==1) then
+			DefenseTableHPText:SetText(format("%d - MAX HP", maxHealth));
+			DefenseTableTotalText:SetText(format("  %002.2f%% - base + Dodge + Parry", totalAvoidance));
+			DefenseTableArmorText:SetText(format("  %d(%002.1f%%) - armor", effectiveArmor,armorReduction));
+			DefenseTableBlockVText:SetText(format("      %d shield block value", blockvalue));
+		end
+		if(manaModule==1) then
+			DefenseTableMPText:SetText("%d - MAX MP", maxMana);
+			DefenseTableMP5Text:SetText("  %d(%002.1f%%) - current MP5", MP5);
+		end			
 	end
 end
 
@@ -265,25 +329,50 @@ function DefenseTable_CreateFrame()
 	DefenseTableHitText:SetPoint("TOPLEFT", 10, y);
 	DefenseTableHitText:SetText("   00.00% - hit");
 	
+	if (mitigationModule==1) then
 	y = y - 13;
-	DefenseTableDashesText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
-	DefenseTableDashesText:SetPoint("TOPLEFT", 10, y);
-	DefenseTableDashesText:SetText("-------------------------");
-	
-	y = y - 13;
-	DefenseTableTotalText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
-	DefenseTableTotalText:SetPoint("TOPLEFT", 10, y);
-	DefenseTableTotalText:SetText("00.00% - base + Dodge + Parry");
+		DefenseTableDashesText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableDashesText:SetPoint("TOPLEFT", 10, y);
+		DefenseTableDashesText:SetText("-------------------------");
 		
-	y = y - 13;
-	DefenseTableArmorText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
-	DefenseTableArmorText:SetPoint("TOPLEFT", 10, y);
-	DefenseTableArmorText:SetText("0(00.00%) - armor");
+		y = y - 13;
+		DefenseTableHPText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableHPText:SetPoint("TOPLEFT", 10, y);
+		DefenseTableHPText:SetText("0(00.00%) - HP");
+		
+		y = y - 13;
+		DefenseTableTotalText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableTotalText:SetPoint("TOPLEFT", 10, y);
+		DefenseTableTotalText:SetText("  00.00% - base + Dodge + Parry");
+			
+		y = y - 13;
+		DefenseTableArmorText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableArmorText:SetPoint("TOPLEFT", 10, y);
+		DefenseTableArmorText:SetText("  0(00.00%) - armor");
 
-	y = y - 13;
-	DefenseTableHPText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
-	DefenseTableHPText:SetPoint("TOPLEFT", 10, y);
-	DefenseTableHPText:SetText("0(00.00%) - HP");
+		y = y - 13;
+		DefenseTableBlockVText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableBlockVText:SetPoint("TOPLEFT", 10, y);
+		DefenseTableBlockVText:SetText("    0(00.00%) - damage reduction on Block");
+	end
+		
+	if (manaModule==1) then
+		y = y - 13;
+		DefenseTableDashesText2 = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableDashesText2:SetPoint("TOPLEFT", 10, y);
+		DefenseTableDashesText2:SetText("-------------------------");
+		
+		y = y - 13;
+		DefenseTableMPText = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableMPText:SetPoint("TOPLEFT", 10, y);
+		DefenseTableMPText:SetText("0(00.00%) - MP");
+		
+		y = y - 13;
+		DefenseTableMP5Text = frame:CreateFontString(nil, nil, "GameFontNormalSmall");
+		DefenseTableMP5Text:SetPoint("TOPLEFT", 10, y);
+		DefenseTableMP5Text:SetText("  00.00% - current mana regen");
+		
+	end
 	
 	y = y - 19;
 	frame:SetHeight(y * -1);
@@ -366,16 +455,137 @@ function DefenseTable_CancelSalvationBuff()
 	return nil
 end
 
--- function GetTargetLevel()
-  -- local targetUnit = UnitName("target");
-  -- if (targetUnit == nil) then
-    -- return nil;
-  -- end
+function shield_equipped()
+	local slot = GetInventorySlotInfo("SecondaryHandSlot")
+	local link = GetInventoryItemLink("player", slot)
+	if link  then
+		local found, _, id, name = string.find(link, "item:(%d+):.*%[(.*)%]")
+--		print("id",name)
+		if found then
+			local _,_,_,_,_,itemType = GetItemInfo(tonumber(id))
+			--print("itemType ",itemType)
+			if(itemType == "Shields") then
+				return true
+			end
+		end
+	end
+	return false
+end
 
-  -- local targetLevel = UnitLevel(targetUnit);
-  -- if (targetLevel == nil) then
-    -- return nil;
-  -- end
+--calculates final shield block value by addint Str
+function calculateBlockValue(shieldBlockValue)
+    -- Get player's strength value
+    local statIndex = 1  -- 1 corresponds to Strength
+    local base, posBuff, negBuff = UnitStat("player", statIndex)
+    local strength = base or 0  -- Set a default value in case it's nil
 
-  -- return targetLevel;
+    -- Calculate blockValue using the player's strength and shieldBlockValue
+    local blockValue = ((strength - 23) / 20) + shieldBlockValue -- 23 is the average starting str among the races
+
+    return blockValue
+end
+
+
+--scans the card for relevant information - Thank you "BetterCharacterStats" for helping with this code piece
+function GetBlockInfo()
+	-- to-maybe-do: account for buffs where appropriate
+
+	local BlockValue = 0
+	local MAX_INVENTORY_SLOTS = 19
+	
+	for slot=1, MAX_INVENTORY_SLOTS do
+		local hasItem = DT_Tooltip:SetInventoryItem("player", slot)
+		if hasItem then
+			for line=1, DT_Tooltip:NumLines() do
+				local left = getglobal(DT_Prefix .. "TextLeft" .. line)
+				if left:GetText() then
+					local _,_, value = strfind(left:GetText(), "(%d+) Block")
+					if value then
+						BlockValue = BlockValue + tonumber(value)
+					end
+					_,_, value = strfind(left:GetText(), "^Equip: Increases the block value of your shield by (%d+).")
+
+					if value then
+						BlockValue = BlockValue + tonumber(value)
+					end
+					
+				end
+			end
+		end
+		
+	end
+	return BlockValue
+end
+
+--calculates mana regeneration
+-- function GetManaRegen()
+	-- -- to-maybe-do: apply buffs/talents
+	-- local base, casting
+	-- local power_regen = GetRegenMPPerSpirit()
+	
+	-- casting = power_regen / 100
+	-- base = power_regen
+	
+	-- local mp5 = 0;
+	-- local MAX_INVENTORY_SLOTS = 19
+	
+	-- for slot=0, MAX_INVENTORY_SLOTS do
+		-- local hasItem = DT_Tooltip:SetInventoryItem("player", slot)
+		
+		-- if hasItem then
+			-- for line=1, DT_Tooltip:NumLines() do
+				-- local left = getglobal(DT_Prefix .. "TextLeft" .. line)
+				
+				-- if left:GetText() then
+					-- local _,_, value = strfind(left:GetText(), L["^Mana Regen %+(%d+)"])
+					-- if value then
+						-- mp5 = mp5 + tonumber(value)
+					-- end
+					-- _,_, value = strfind(left:GetText(), L["Equip: Restores (%d+) mana per 5 sec."])
+					-- if value then
+						-- mp5 = mp5 + tonumber(value)
+					-- end
+					-- _,_, value = strfind(left:GetText(), L["^%+(%d+) mana every 5 sec."])
+					-- if value then
+						-- mp5 = mp5 + tonumber(value)
+					-- end
+				-- end
+			-- end
+		-- end
+		
+	-- end
+	
+	-- -- buffs
+	-- local _, _, mp5FromAura = DT:GetPlayerAura(L["Increases hitpoints by 300. 15%% haste to melee attacks. 10 mana regen every 5 seconds."])
+	-- if mp5FromAura then
+		-- mp5 = mp5 + 10
+	-- end
+	
+	-- return base, casting, mp5
+-- end
+
+-- local function GetRegenMPPerSpirit()
+	-- local addvalue = 0
+	
+	-- local stat, Spirit, posBuff, negBuff = UnitStat("player", 5)
+	-- local lClass, class = UnitClass("player")
+	
+	-- if class == "DRUID" then
+		-- addvalue = (Spirit / 5 + 15)
+	-- elseif class == "HUNTER" then
+		-- addvalue = (Spirit / 5 + 15)
+	-- elseif class == "MAGE" then
+		-- addvalue = (Spirit / 4 + 12.5)
+	-- elseif class == "PALADIN" then
+		-- addvalue = (Spirit / 5 + 15)
+	-- elseif class == "PRIEST" then
+		-- addvalue = (Spirit / 4 + 12.5)
+	-- elseif class == "SHAMAN" then
+		-- addvalue = (Spirit / 5 + 17)
+	-- elseif class == "WARLOCK" then
+		-- addvalue = (Spirit / 5 + 15)
+	-- else
+		-- return addvalue
+	-- end
+	-- return addvalue
 -- end
